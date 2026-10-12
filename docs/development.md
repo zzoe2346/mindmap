@@ -20,8 +20,17 @@ Tests는 순환 방지, 가지 삭제, 접힘, 배치, 저장 왕복, 손상 파
 스크린샷은 CUA로 실행 중인 앱 창을 캡처합니다. QA 앱은 work/qa에 별도 번들 식별자로 생성해 테스트했습니다.
 개인 문서와 임시 빌드, QA 산출물은 Git에서 제외합니다.
 
-아이콘을 재생성하려면 toolchain.sh를 읽은 셸에서 다음을 실행합니다.
+## 앱 아이콘
+
+`Artwork/AppIcon/AppIcon.icon`을 Icon Composer에서 편집합니다. 네 개의 SVG 레이어를 두 그룹으로 나누고 흰 배경과 Liquid Glass 효과를 적용했습니다.
 
 ```sh
-xcrun swift -module-cache-path .build/module-cache scripts/icon.swift work/AppIcon.iconset AppResources/AppIcon.icns
+./scripts/compile-icon.sh
+./scripts/export-icon-preview.sh
+./scripts/package.sh
 ```
+
+package는 Icon Composer 자산을 actool로 컴파일하고 `.build/icon/AppIcon.icns`와 `Assets.car`를 앱에 함께 포함합니다. 번들의 CFBundleIconName은 AppIcon입니다. 별도 빌드 산출물을 원본으로 편집하지 않습니다.
+
+공개 이미지는 설치된 Icon Composer의 ictool로 macOS Default, 1024×1024, scale 1, design generation 27에서 내보냅니다. 이 옵션은 Xcode 27 도구에서 확인했습니다. 앱의 최소 지원 버전은 macOS 26이며 SDK가 앱 리소스를 컴파일합니다.
+`AppIcon-composer.png`는 직접 내보낸 원본이고, `AppIcon-web.png`는 같은 렌더링을 흰 바탕에 합성해 투명 모서리로 GitHub 표 색이 비치지 않게 한 이미지입니다. README와 프로필은 같은 web 이미지를 사용합니다. 앱에는 네이티브 아이콘을 사용합니다.

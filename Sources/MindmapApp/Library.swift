@@ -126,6 +126,9 @@ struct HomeView: View {
     @ObservedObject var store: LibraryStore
     @State private var search = ""
     @State private var favoritesOnly = false
+    private let appIcon: NSImage =
+        Bundle.main.url(forResource: "AppIcon", withExtension: "icns")
+        .flatMap { NSImage(contentsOf: $0) } ?? NSApplication.shared.applicationIconImage
     private var visibleItems: [LibraryItem] {
         store.items.filter { item in
             (!favoritesOnly || store.favorites.contains(item.id))
@@ -137,7 +140,7 @@ struct HomeView: View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
-                    Image(nsImage: NSApplication.shared.applicationIconImage)
+                    Image(nsImage: appIcon)
                         .resizable()
                         .interpolation(.high)
                         .scaledToFit()

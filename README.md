@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/app-icon.png" width="160" height="160" alt="mindmap 앱 아이콘">
+  <img src="Artwork/AppIcon/Preview/AppIcon-web.png" width="160" height="160" alt="mindmap 앱 아이콘">
 </p>
 <h1 align="center">mindmap</h1>
 <p align="center">

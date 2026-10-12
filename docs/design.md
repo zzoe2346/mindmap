@@ -50,6 +50,16 @@ Apple 공식 API를 확인해 적용한 근거:
 ## 홈 앱 아이콘 통일
 
 2026-10-12 사용자 요청으로 홈 이름 옆의 별도 SF Symbol을 앱 아이콘으로 교체했다.
-NSApplication.applicationIconImage를 원본 비율의 32pt 이미지로 표시해 Dock과 홈이 같은 아이콘을 사용한다.
+원본 비율의 32pt 이미지로 앱과 홈이 같은 아이콘을 사용한다. Composer 적용 전에는 NSApplication.applicationIconImage를 읽었으며, 현재는 번들의 컴파일된 AppIcon.icns를 직접 읽는다.
 앱 이름이 옆에 있으므로 장식 이미지는 접근성 읽기에서 제외한다.
 근거: https://developer.apple.com/documentation/appkit/nsapplication/applicationiconimage
+
+## Icon Composer 적용 (2026-10-12)
+
+기존 가지 심볼을 SVG 레이어로 옮겼다. 중심 생각을 전경 그룹, 세 가지를 배경 그룹으로 구성해 겹치는 부분을 가리고 Liquid Glass, 그림자와 반투명 효과를 적용했다. macOS Default, Dark, Mono는 Icon Composer에서 제공한다. 흰 배경을 사용한다.
+
+앱은 actool의 AppIcon.icns와 Assets.car, CFBundleIconName을 사용하고 홈은 번들의 AppIcon.icns를 직접 읽어 시스템 아이콘 캐시가 오래된 이미지를 반환하는 경우에도 현재 자산을 표시한다. 리소스를 읽을 수 없을 때만 applicationIconImage를 대체 이미지로 사용한다. 공개용 이미지는 같은 Composer 렌더링의 외곽 투명을 흰색으로 채워 표 배경이 이미지 안으로 비치지 않게 한다. 시스템 아이콘용 모서리와 투명 처리는 네이티브 자산에 맡긴다.
+
+근거: [Apple: Creating your app icon using Icon Composer](https://developer.apple.com/documentation/xcode/creating-your-app-icon-using-icon-composer), [Create icons with Icon Composer](https://developer.apple.com/videos/play/wwdc2025/361/). SVG 레이어와 하나의 .icon 문서에서 플랫폼별 외형을 생성하는 방식을 적용했다. 로컬 Xcode의 ictool --help와 actool 컴파일 결과로 인자를 확인했다.
+
+홈 이미지 로딩 근거: https://developer.apple.com/documentation/appkit/nsimage/init(contentsof:)

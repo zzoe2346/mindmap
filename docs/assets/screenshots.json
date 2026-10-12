@@ -1,7 +1,7 @@
 {
   "date": "2026-10-12",
   "version": "0.1.0",
-  "sourceRevision": "source-files-sha256:c8316c46fa51341c01e0f4c07d9e864d961cc77e801875511dab4ce15f191bb4",
+  "sourceRevision": "source-and-icon-files-sha256:c499c267e02d9caa02abe93ddb94bd8a03a3083c186bb6f855387d37b7260fa4",
   "os": "macOS 27.0.1 (26A434)",
   "sdk": "27.0",
   "screenshots": [
@@ -11,21 +11,25 @@
       "width": 2480,
       "height": 1716,
       "sha256": "cbf563db361d3e664c4b67ea7f7676e1b619900680d3e06e2a7ac6e607209b98",
-      "containsUserDocuments": false
+      "containsUserDocuments": false,
+      "sourceRevision": "source-files-sha256:c8316c46fa51341c01e0f4c07d9e864d961cc77e801875511dab4ce15f191bb4",
+      "sourceCommit": "faf3b1ac7f3ac98e5d07e019f864288f4a013984",
+      "binarySha256": "bdc1c9b7caa1b2aad3a1bbcc68a5c868ef41a16124d0c7c75a793f0d94904d1a",
+      "captureBinarySha256": "d240ed88503a8970232d80b3174e3f5c79d7abfd8994ed80d792b046994e56d6"
     },
     {
       "file": "home.png",
-      "description": "Three public demo documents and one favorite",
+      "description": "Three public demo documents and the Icon Composer home logo",
       "width": 2200,
       "height": 1544,
-      "sha256": "71f6fbf1d9b1e1f3d9f14055e9bffcef071dab09613dc0ea430a70b5c641af59",
-      "containsUserDocuments": false
+      "sha256": "debe3215db8ca157488f36aa03dc8a178fa2c6cfdaf402a4e38bb258c58ed887",
+      "containsUserDocuments": false,
+      "sourceRevision": "source-and-icon-files-sha256:c499c267e02d9caa02abe93ddb94bd8a03a3083c186bb6f855387d37b7260fa4"
     }
   ],
-  "binarySha256": "bdc1c9b7caa1b2aad3a1bbcc68a5c868ef41a16124d0c7c75a793f0d94904d1a",
-  "verification": "2026-10-12 home logo uses application icon, 21 tests and actual packaged app relaunch verified",
-  "sourceCommit": "faf3b1ac7f3ac98e5d07e019f864288f4a013984",
+  "binarySha256": "3402f56b3ea680ccd2fa6423897fe96450151770e80ea51664ede8873980929a",
+  "verification": "2026-10-12 Icon Composer native assets, 21 tests, signed packaged app, About panel and home logo verified. Editor screenshot retains its original capture revision.",
   "captureMethod": "CUA getScreenshot of actual app windows, converted from JPEG to PNG with sips without cropping or retouching",
   "captureBundleIdentifier": "com.jeongseonghun.mindmap.readmepreview",
-  "captureBinarySha256": "d240ed88503a8970232d80b3174e3f5c79d7abfd8994ed80d792b046994e56d6"
+  "captureBinarySha256": "12d4c665934d3198e872d526fe84a025c5aeade6b9297f88fb49646d1c14aa78"
 }
