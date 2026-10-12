@@ -6,6 +6,7 @@ public struct Topic: Codable, Equatable, Identifiable, Sendable {
     public var title: String
     public var collapsed: Bool
     public var side: Int
+    public var textWidth: Double?
     public init(
         id: UUID = UUID(), parentID: UUID? = nil, title: String, collapsed: Bool = false, side: Int = 1
     ) {
@@ -136,7 +137,9 @@ public struct MindMap: Codable, Equatable, Sendable {
         let ids = Set(topics.map(\.id))
         guard ids.count == topics.count else { throw MapError.invalid("중복된 토픽이 있습니다.") }
         for topic in topics {
-            guard topic.title.count <= 100000, [-1, 1].contains(topic.side) else {
+            guard topic.title.count <= 100000, [-1, 1].contains(topic.side),
+                topic.textWidth.map({ $0.isFinite && (120...600).contains($0) }) ?? true
+            else {
                 throw MapError.invalid("토픽 값이 올바르지 않습니다.")
             }
             if let parent = topic.parentID, !ids.contains(parent) { throw MapError.invalid("상위 토픽이 없습니다.") }
