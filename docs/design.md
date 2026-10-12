@@ -46,3 +46,10 @@ Apple 공식 API를 확인해 적용한 근거:
 - https://developer.apple.com/documentation/appkit/nstextinputclient : 시스템 입력 체계를 사용하고 조합 중 Enter/Tab/Esc를 가로채지 않는다.
 - https://developer.apple.com/documentation/appkit/nsdocumentcontroller/recentdocumenturls : OS 최근 문서와 자체 보관한 경로로 홈 목록을 구성한다.
 - 설치 SDK의 NSDocument.h renameDocument: : 홈 이름 변경은 네이티브 문서 이름 변경 UI에 위임한다.
+
+## 홈 앱 아이콘 통일
+
+2026-10-12 사용자 요청으로 홈 이름 옆의 별도 SF Symbol을 앱 아이콘으로 교체했다.
+NSApplication.applicationIconImage를 원본 비율의 32pt 이미지로 표시해 Dock과 홈이 같은 아이콘을 사용한다.
+앱 이름이 옆에 있으므로 장식 이미지는 접근성 읽기에서 제외한다.
+근거: https://developer.apple.com/documentation/appkit/nsapplication/applicationiconimage

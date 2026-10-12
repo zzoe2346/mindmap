@@ -136,8 +136,15 @@ struct HomeView: View {
     var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
-                Label("mindmap", systemImage: "point.3.connected.trianglepath.dotted").font(.title2.bold())
-                    .padding(.vertical, 22)
+                HStack(spacing: 10) {
+                    Image(nsImage: NSApplication.shared.applicationIconImage)
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFit()
+                        .frame(width: 32, height: 32)
+                        .accessibilityHidden(true)
+                    Text("mindmap").font(.title2.bold())
+                }.padding(.vertical, 22)
                 Button {
                     favoritesOnly = false
                 } label: {
