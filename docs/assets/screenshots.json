@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-12",
+  "version": "0.1.0",
+  "sourceRevision": "source-files-sha256:a4fa21a442db83a95252c8d72c77b87e96142fab24964ce5ee6d9759f009d32f",
+  "os": "macOS 27.0.1 (26A434)",
+  "sdk": "27.0",
+  "screenshots": [],
+  "reason": "Actual CUA screenshots were inspected during QA but not exported before the native app connection timed out. No synthetic screenshot is substituted.",
+  "binarySha256": "4cff3b09bec33761a716fd88b11dac9e7bd0014bd4dfebaec28e5dd209c6f49b"
+}

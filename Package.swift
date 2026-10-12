@@ -4,10 +4,12 @@ import PackageDescription
 let package = Package(
     name: "Mindmap",
     platforms: [.macOS("26.0")],
-    products: [.library(name: "MindmapCore", targets: ["MindmapCore"])],
+    products: [.executable(name: "Mindmap", targets: ["MindmapApp"])],
     targets: [
         .target(name: "MindmapCore"),
+        .executableTarget(name: "MindmapApp", dependencies: ["MindmapCore"]),
         .testTarget(name: "MindmapCoreTests", dependencies: ["MindmapCore"]),
+        .testTarget(name: "MindmapAppTests", dependencies: ["MindmapApp", "MindmapCore"]),
     ],
     swiftLanguageModes: [.v6]
 )
