@@ -1,10 +1,11 @@
 {
   "date": "2026-10-12",
   "version": "0.1.0",
-  "sourceRevision": "source-files-sha256:a4fa21a442db83a95252c8d72c77b87e96142fab24964ce5ee6d9759f009d32f",
+  "sourceRevision": "source-files-sha256:dc98fc7cdd48b49c0b4720ce0aeae2a8488cb04e45788524a81c9ee72e6f1001",
   "os": "macOS 27.0.1 (26A434)",
   "sdk": "27.0",
   "screenshots": [],
-  "reason": "Actual CUA screenshots were inspected during QA but not exported before the native app connection timed out. No synthetic screenshot is substituted.",
-  "binarySha256": "4cff3b09bec33761a716fd88b11dac9e7bd0014bd4dfebaec28e5dd209c6f49b"
+  "reason": "Actual CUA screenshots of the editor and home were inspected in tool output. No screenshot file was exported or substituted.",
+  "binarySha256": "92944ef65f12ae396e2cf448c064159d510448788ac5e4caa12e1e5314ff8dd0",
+  "verification": "2026-10-12 editing UX and home, Core 15 and App 6 tests, actual pointer drag and deployed app launch verified"
 }

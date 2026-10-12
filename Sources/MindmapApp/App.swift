@@ -14,14 +14,15 @@ struct MindmapMain {
     func applicationWillFinishLaunching(_ notification: Notification) { buildMenus() }
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSDocumentController.shared.autosavingDelay = 2
-        if NSDocumentController.shared.documents.isEmpty { NSDocumentController.shared.newDocument(nil) }
+        if NSDocumentController.shared.documents.isEmpty { HomeWindowController.shared.show() }
         NSApp.activate(ignoringOtherApps: true)
     }
-    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool { true }
+    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool { false }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag { NSDocumentController.shared.newDocument(nil) }
+        if !flag { HomeWindowController.shared.show() }
         return true
     }
+    @objc func showHome(_ sender: Any?) { HomeWindowController.shared.show() }
     private func buildMenus() {
         let main = NSMenu()
         NSApp.mainMenu = main
@@ -47,6 +48,7 @@ struct MindmapMain {
         app.addItem(.separator())
         item(app, "mindmap 종료", #selector(NSApplication.terminate(_:)), "q")
         let file = menu("파일")
+        item(file, "홈", #selector(showHome(_:)), "h", [.command, .shift])
         item(file, "새 마인드맵", #selector(NSDocumentController.newDocument(_:)), "n")
         item(file, "열기…", #selector(NSDocumentController.openDocument(_:)), "o")
         file.addItem(.separator())
@@ -62,11 +64,16 @@ struct MindmapMain {
         item(edit, "복사", #selector(NSText.copy(_:)), "c")
         item(edit, "붙여넣기", #selector(NSText.paste(_:)), "v")
         item(edit, "전체 선택", #selector(NSText.selectAll(_:)), "a")
+        item(edit, "가지 복제", #selector(MapCanvas.duplicateBranches(_:)), "d")
+        item(edit, "토픽 찾기", #selector(EditorController.focusSearch(_:)), "f")
         let topic = menu("토픽")
         item(topic, "하위 토픽 추가", #selector(EditorController.addChildTopic(_:)), "\t", [])
         item(topic, "형제 토픽 추가", #selector(EditorController.addSibling(_:)), "\r", [])
         item(topic, "제목 편집", #selector(EditorController.editTopic(_:)), "\r", .command)
         item(topic, "선택 항목 삭제", #selector(EditorController.deleteItem(_:)), "\u{8}", [])
+        item(topic, "위로 이동", #selector(EditorController.moveTopicUp(_:)), "\u{F700}", [.command, .option])
+        item(topic, "아래로 이동", #selector(EditorController.moveTopicDown(_:)), "\u{F701}", [.command, .option])
+        item(topic, "한 단계 밖으로", #selector(EditorController.outdent(_:)), "[", [.command])
         topic.addItem(.separator())
         item(topic, "관계선 연결", #selector(EditorController.connect(_:)), "r", [.command, .shift])
         item(topic, "가지 접기/펼치기", #selector(EditorController.fold(_:)), "/")

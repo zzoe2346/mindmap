@@ -22,17 +22,28 @@ struct InspectorView: View {
                         Text(topic.title).font(.system(size: 17, weight: .medium)).lineLimit(8).textSelection(
                             .enabled)
                         Button("제목 편집") { session.canvas?.beginEditing() }.buttonStyle(.bordered)
-                        HStack {
-                            Button("하위 추가") { session.add(child: true) }
-                            Button("형제 추가") { session.add(child: false) }
-                        }.buttonStyle(.bordered)
-                        if !session.map.children(id).isEmpty {
-                            Button(topic.collapsed ? "가지 펼치기" : "가지 접기") { session.toggleFold() }
+                        if session.selection.count > 1 {
+                            Text("\(session.selection.count)개 토픽 선택됨").foregroundStyle(.tint)
                         }
-                        Button {
-                            session.beginRelationship()
-                        } label: {
-                            Label("다른 토픽과 연결", systemImage: "arrow.triangle.branch")
+                        Text("토픽 너비").font(.callout)
+                        Slider(
+                            value: Binding(
+                                get: { topic.textWidth ?? 300 },
+                                set: { value in
+                                    session.canvas?.finishEditing()
+                                    session.change("토픽 너비 변경") { map in
+                                        if let index = map.topics.firstIndex(where: { $0.id == id }) {
+                                            map.topics[index].textWidth = value
+                                        }
+                                    }
+                                }), in: 120...600, step: 20
+                        ).accessibilityLabel("토픽 너비")
+                        Button("너비 자동 맞춤") {
+                            session.change("토픽 너비 자동 맞춤") { map in
+                                if let index = map.topics.firstIndex(where: { $0.id == id }) {
+                                    map.topics[index].textWidth = nil
+                                }
+                            }
                         }
                         if session.connectingFrom != nil {
                             Text("캔버스에서 연결할 토픽을 클릭하세요.").font(.callout).foregroundStyle(.tint)
@@ -99,9 +110,13 @@ struct InspectorView: View {
                     shortcut("관계선", "⇧⌘R")
                     shortcut("접기와 펼치기", "⌘/")
                     shortcut("전체 보기", "⌘0")
-                    Text("빈 공간을 드래그해 이동하세요. 토픽을 다른 토픽에 놓으면 가지가 이동합니다.").font(.caption).foregroundStyle(
-                        .secondary
-                    ).padding(.top, 5)
+                    shortcut("토픽 찾기", "⌘F")
+                    shortcut("가지 복제", "⌘D")
+                    shortcut("순서 이동", "⌥⌘↑ ↓")
+                    Text("토픽 중앙에 놓으면 하위로, 가장자리나 사이에 놓으면 순서가 바뀝니다. ⌘ 클릭으로 여러 토픽을 선택하세요.").font(.caption)
+                        .foregroundStyle(
+                            .secondary
+                        ).padding(.top, 5)
                 }
             }.padding(20)
         }

@@ -5,6 +5,7 @@ import MindmapCore
 @MainActor final class EditorSession: ObservableObject {
     @Published var map = MindMap()
     @Published var selectedTopic: UUID?
+    @Published var selectedTopics: Set<UUID> = []
     @Published var selectedRelation: UUID?
     @Published var connectingFrom: UUID?
     @Published var zoom: Double = 1
@@ -16,12 +17,14 @@ import MindmapCore
     weak var document: MindmapDocument?
     weak var canvas: MapCanvas?
     func selectTopic(_ id: UUID) {
+        selectedTopics = [id]
         selectedTopic = id
         selectedRelation = nil
     }
     func selectRelation(_ id: UUID) {
         selectedRelation = id
         selectedTopic = nil
+        selectedTopics = []
     }
     func change(_ name: String, _ update: (inout MindMap) -> Void) {
         var copy = map
@@ -56,7 +59,8 @@ import MindmapCore
             change("관계선 삭제") { $0.relationships.removeAll { $0.id == edge } }
             selectedRelation = nil
         } else if let id = selectedTopic, let parent = map.topic(id)?.parentID {
-            change("토픽 삭제") { $0.remove(id) }
+            let roots = map.selectionRoots(selection)
+            change("토픽 삭제") { map in for root in roots { map.remove(root) } }
             selectTopic(parent)
         }
         canvas?.window?.makeFirstResponder(canvas)
@@ -108,6 +112,16 @@ import MindmapCore
 @objc(MindmapDocument)
 final class MindmapDocument: NSDocument {
     let session = EditorSession()
+    let libraryID = UUID()
+    override var fileURL: URL? {
+        didSet {
+            if let fileURL {
+                Task { @MainActor [weak self] in
+                    LibraryStore.shared.relocated(from: oldValue, to: fileURL, draftID: self?.libraryID)
+                }
+            }
+        }
+    }
     override init() {
         super.init()
         session.document = self
@@ -123,7 +137,9 @@ final class MindmapDocument: NSDocument {
     ) -> String? { "mindmap" }
     nonisolated override class var autosavesInPlace: Bool { true }
     nonisolated override class var autosavesDrafts: Bool { true }
-    override func data(ofType typeName: String) throws -> Data { try session.map.encoded() }
+    override func data(ofType typeName: String) throws -> Data {
+        try (session.canvas?.mapForSaving ?? session.map).encoded()
+    }
     nonisolated override class func canConcurrentlyReadDocuments(ofType typeName: String) -> Bool { false }
     override func read(from data: Data, ofType typeName: String) throws {
         let decoded = try MindMap.decode(data)
@@ -139,8 +155,9 @@ final class MindmapDocument: NSDocument {
         undoManager?.registerUndo(withTarget: self) { target in target.apply(previous, name: name) }
         undoManager?.setActionName(name)
         session.map = value
+        session.selectedTopics.formIntersection(value.visibleIDs())
         if let id = session.selectedTopic, !value.visibleIDs().contains(id) {
-            session.selectedTopic = value.root.id
+            session.selectTopic(value.root.id)
         }
         if let id = session.selectedRelation, !value.relationships.contains(where: { $0.id == id }) {
             session.selectedRelation = nil

@@ -8,6 +8,9 @@ import SwiftUI
     private var inspector: NSView!
     private var inspectorWidth: NSLayoutConstraint!
     private var status: NSTextField!
+    private let searchField = NSSearchField()
+    private var lastSearch = ""
+    private var searchIndex = -1
     private var subscriptions = Set<AnyCancellable>()
     init(session: EditorSession) {
         self.session = session
@@ -79,6 +82,39 @@ import SwiftUI
         default: return true
         }
     }
+    @objc func showHome(_ sender: Any?) {
+        canvas.finishEditing()
+        canvas.persistViewport()
+        HomeWindowController.shared.show()
+    }
+    @objc func moveTopicUp(_ sender: Any?) { session.moveSelection(direction: -1) }
+    @objc func moveTopicDown(_ sender: Any?) { session.moveSelection(direction: 1) }
+    @objc func outdent(_ sender: Any?) { session.outdent() }
+    @objc func focusSearch(_ sender: Any?) { view.window?.makeFirstResponder(searchField) }
+    @objc func searchTopics(_ sender: Any?) {
+        canvas.finishEditing()
+        let query = searchField.stringValue
+        guard !query.isEmpty else { return }
+        let matches = session.map.topics.filter { $0.title.localizedStandardContains(query) }
+        guard !matches.isEmpty else {
+            session.message = "검색 결과가 없습니다."
+            return
+        }
+        searchIndex = query == lastSearch ? (searchIndex + 1) % matches.count : 0
+        lastSearch = query
+        let id = matches[searchIndex].id
+        session.change("검색한 가지 펼치기") { map in
+            var parent = map.topic(id)?.parentID
+            while let current = parent, let index = map.topics.firstIndex(where: { $0.id == current }) {
+                map.topics[index].collapsed = false
+                parent = map.topics[index].parentID
+            }
+        }
+        session.selectTopic(id)
+        canvas.rebuild()
+        canvas.reveal(id)
+        session.message = "검색 결과 \(searchIndex + 1) / \(matches.count), Enter로 다음 결과"
+    }
     @objc func addChildTopic(_ sender: Any?) { session.add(child: true) }
     @objc func addSibling(_ sender: Any?) { session.add(child: false) }
     @objc func editTopic(_ sender: Any?) { canvas.beginEditing() }
@@ -101,13 +137,14 @@ import SwiftUI
         window.toolbar = toolbar
         window.toolbarStyle = .unified
     }
-    private let identifiers = ["child", "sibling", "connect", "fold", "fit", "inspector"]
+    private let identifiers = ["home", "search", "child", "sibling", "connect", "fold", "fit", "inspector"]
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         identifiers.map { .init($0) } + [.flexibleSpace]
     }
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [
-            .init("child"), .init("sibling"), .init("connect"), .init("fold"), .flexibleSpace, .init("fit"),
+            .init("home"), .init("child"), .init("sibling"), .init("connect"), .init("fold"), .flexibleSpace,
+            .init("search"), .init("fit"),
             .init("inspector"),
         ]
     }
@@ -115,7 +152,20 @@ import SwiftUI
         _ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier,
         willBeInsertedIntoToolbar flag: Bool
     ) -> NSToolbarItem? {
+        if id.rawValue == "search" {
+            let item = NSToolbarItem(itemIdentifier: id)
+            searchField.placeholderString = "토픽 찾기"
+            searchField.setAccessibilityLabel("토픽 검색")
+            searchField.target = self
+            searchField.action = #selector(searchTopics(_:))
+            searchField.sendsWholeSearchString = true
+            searchField.frame = NSRect(x: 0, y: 0, width: 170, height: 24)
+            item.view = searchField
+            item.label = "검색"
+            return item
+        }
         let definitions: [String: (String, String, Selector)] = [
+            "home": ("홈", "house", #selector(showHome(_:))),
             "child": ("하위 토픽", "plus.square.on.square", #selector(addChildTopic(_:))),
             "sibling": ("형제 토픽", "plus.rectangle", #selector(addSibling(_:))),
             "connect": ("관계선", "arrow.triangle.branch", #selector(connect(_:))),

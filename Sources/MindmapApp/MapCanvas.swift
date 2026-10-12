@@ -44,12 +44,16 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
 @MainActor final class MapCanvas: NSView, NSTextViewDelegate {
     let session: EditorSession
     var frames: [UUID: CGRect] = [:]
-    private var pan = CGPoint.zero
+    var pan = CGPoint.zero
+    private var restoredViewport = false
     private var subscriptions = Set<AnyCancellable>()
     private var mouseStart = CGPoint.zero
     private var originalPan = CGPoint.zero
     private var draggingTopic: UUID?
     private var dropTarget: UUID?
+    private var dropPlacement: DropPlacement?
+    private var dragPoint = CGPoint.zero
+    private var editingChanged = false
     private var dragged = false
     private var bending = false
     private var bendPreview: Double?
@@ -86,20 +90,28 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
     }
     func rebuild() {
         var sizes: [UUID: MapRect] = [:]
-        for topic in session.map.topics {
+        let displayMap = mapForSaving
+        let oldFrame = editingID.flatMap { frames[$0] }
+        for topic in displayMap.topics {
             let font = nodeFont(topic)
             let style = NSMutableParagraphStyle()
             style.lineBreakMode = .byWordWrapping
             let measured = (topic.title as NSString).boundingRect(
-                with: NSSize(width: 300, height: 100000),
+                with: NSSize(width: topic.textWidth ?? 300, height: 100000),
                 options: [.usesLineFragmentOrigin, .usesFontLeading],
                 attributes: [.font: font, .paragraphStyle: style])
             sizes[topic.id] = MapRect(
-                width: max(topic.parentID == nil ? 160 : 100, ceil(measured.width) + 36),
+                width: topic.textWidth.map { $0 + 36 }
+                    ?? max(topic.parentID == nil ? 160 : 100, ceil(measured.width) + 36),
                 height: max(48, ceil(measured.height) + 26))
         }
-        frames = TreeLayout.frames(for: session.map, sizes: sizes).mapValues {
+        frames = TreeLayout.frames(for: displayMap, sizes: sizes).mapValues {
             CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height)
+        }
+        if let id = editingID, let frame = frames[id], let oldFrame {
+            pan.x += (oldFrame.minX - frame.minX) * session.zoom
+            pan.y += (oldFrame.minY - frame.minY) * session.zoom
+            editor?.frame = screenRect(frame)
         }
         needsDisplay = true
         updateAccessibility()
@@ -132,7 +144,7 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
             guard let r = frames[topic.id] else { continue }
             let tint = color(topic.id)
             let root = topic.parentID == nil
-            let selected = session.selectedTopic == topic.id
+            let selected = session.selection.contains(topic.id)
             let path = NSBezierPath(roundedRect: r, xRadius: root ? 14 : 9, yRadius: root ? 14 : 9)
             (root ? NSColor.labelColor : tint.withAlphaComponent(0.08)).setFill()
             path.fill()
@@ -152,7 +164,9 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
                 .foregroundColor: root ? NSColor.textBackgroundColor : NSColor.labelColor,
                 .paragraphStyle: style,
             ]
-            (topic.title as NSString).draw(in: r.insetBy(dx: 18, dy: 13), withAttributes: attributes)
+            if topic.id != editingID {
+                (topic.title as NSString).draw(in: r.insetBy(dx: 18, dy: 13), withAttributes: attributes)
+            }
             if !session.map.children(topic.id).isEmpty {
                 let left = r.midX < 0 && topic.parentID != nil
                 let button = CGRect(x: left ? r.minX - 22 : r.maxX + 5, y: r.midY - 9, width: 18, height: 18)
@@ -167,6 +181,7 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
                     withAttributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: tint])
             }
         }
+        drawDragPreview()
         context.restoreGState()
         if session.map.topics.count == 1 {
             let text = "생각 하나에서 시작하세요\n토픽을 더블 클릭해 이름을 바꾸고 Tab으로 가지를 펼쳐보세요."
@@ -179,6 +194,79 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
                     .paragraphStyle: style,
                 ])
         }
+    }
+    struct DropPlacement {
+        var parent: UUID
+        var before: UUID?
+        var side: Int
+        var lineY: CGFloat?
+        var lineFrame: CGRect?
+    }
+    func dropPlacement(at p: CGPoint) -> DropPlacement? {
+        let roots = session.map.selectionRoots(session.selection)
+        guard !roots.isEmpty, !roots.contains(session.map.root.id) else { return nil }
+        let excluded = roots.reduce(into: Set<UUID>()) {
+            $0.formUnion(session.map.descendants($1).union([$1]))
+        }
+        let candidates = frames.filter {
+            !excluded.contains($0.key) && $0.value.insetBy(dx: -28, dy: -20).contains(p)
+        }
+        guard let (id, rect) = candidates.min(by: { abs($0.value.midY - p.y) < abs($1.value.midY - p.y) }),
+            let topic = session.map.topic(id)
+        else { return nil }
+        if let parent = topic.parentID,
+            p.y < rect.minY + min(12, rect.height * 0.25) || p.y > rect.maxY - min(12, rect.height * 0.25)
+        {
+            let before = p.y < rect.midY
+            let siblings = session.map.children(parent).filter { !roots.contains($0.id) }
+            guard let index = siblings.firstIndex(where: { $0.id == id }),
+                roots.allSatisfy({ session.map.canReparent($0, to: parent) })
+            else { return nil }
+            return DropPlacement(
+                parent: parent,
+                before: before ? id : (index + 1 < siblings.count ? siblings[index + 1].id : nil),
+                side: topic.side, lineY: before ? rect.minY - 9 : rect.maxY + 9, lineFrame: rect)
+        }
+        guard rect.contains(p), roots.allSatisfy({ session.map.canReparent($0, to: id) }) else { return nil }
+        let side =
+            id == session.map.root.id && session.map.layout == .balanced
+            ? (p.x < rect.midX ? -1 : 1) : topic.side
+        return DropPlacement(parent: id, side: side)
+    }
+    private func drawDragPreview() {
+        guard dragged, let id = draggingTopic, let topic = session.map.topic(id) else { return }
+        if let placement = dropPlacement, let y = placement.lineY, let r = placement.lineFrame {
+            let path = NSBezierPath()
+            path.move(to: CGPoint(x: r.minX - 8, y: y))
+            path.line(to: CGPoint(x: r.maxX + 8, y: y))
+            NSColor.controlAccentColor.setStroke()
+            path.lineWidth = 3 / session.zoom
+            path.stroke()
+        }
+        let ghost = CGRect(x: dragPoint.x + 16, y: dragPoint.y + 16, width: 190, height: 44)
+        NSColor.controlAccentColor.withAlphaComponent(0.18).setFill()
+        NSBezierPath(roundedRect: ghost, xRadius: 8, yRadius: 8).fill()
+        let label = session.selection.count > 1 ? "\(session.selection.count)개 토픽 이동" : topic.title
+        (label as NSString).draw(
+            in: ghost.insetBy(dx: 10, dy: 10),
+            withAttributes: [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor.labelColor])
+    }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil, !restoredViewport else { return }
+        restoredViewport = true
+        if let path = session.document?.fileURL?.path,
+            let values = UserDefaults.standard.array(forKey: "viewport:" + path) as? [Double],
+            values.count == 3, values.allSatisfy({ $0.isFinite })
+        {
+            session.zoom = min(3, max(0.15, values[0]))
+            pan = CGPoint(x: values[1], y: values[2])
+        }
+        rebuild()
+    }
+    func persistViewport() {
+        guard let path = session.document?.fileURL?.path else { return }
+        UserDefaults.standard.set([session.zoom, pan.x, pan.y], forKey: "viewport:" + path)
     }
     private func drawBranches() {
         for topic in session.map.topics {
@@ -292,6 +380,7 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
         dragged = false
         draggingTopic = nil
         dropTarget = nil
+        dropPlacement = nil
         bending = false
         if let id = session.selectedRelation, let samples = relationSamples[id],
             hypot(samples[40].x - w.x, samples[40].y - w.y) < 12 / session.zoom
@@ -309,11 +398,16 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
                 session.connect(to: id)
                 return
             }
-            session.selectTopic(id)
+            if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.shift) {
+                session.toggleSelection(id)
+            } else if !session.selection.contains(id) {
+                session.selectTopic(id)
+            }
             draggingTopic = id
             if event.clickCount == 2 {
                 draggingTopic = nil
-                beginEditing()
+                beginEditing(selectAll: false)
+                editor?.mouseDown(with: event)
             }
             return
         }
@@ -347,9 +441,18 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
                 max(
                     -500,
                     ((w.x - (a.midX + b.midX) / 2) * (-dy) + (w.y - (a.midY + b.midY) / 2) * dx) / length))
-        } else if let id = draggingTopic {
-            dropTarget = topicAt(world(p)).flatMap { session.map.canReparent(id, to: $0) ? $0 : nil }
-            session.message = dropTarget == nil ? "다른 토픽 위에 놓으면 그 아래로 이동합니다." : "놓으면 초록색 토픽의 하위로 이동합니다."
+        } else if draggingTopic != nil {
+            if p.x < 28 { pan.x += 12 }
+            if p.x > bounds.width - 28 { pan.x -= 12 }
+            if p.y < 28 { pan.y += 12 }
+            if p.y > bounds.height - 28 { pan.y -= 12 }
+            dragPoint = world(p)
+            dropPlacement = dropPlacement(at: dragPoint)
+            dropTarget = dropPlacement?.lineY == nil ? dropPlacement?.parent : nil
+            session.message =
+                dropPlacement == nil
+                ? "옮길 수 있는 토픽이나 토픽 사이에 놓으세요. Esc로 취소합니다."
+                : (dropTarget == nil ? "파란 선 위치로 순서를 변경합니다." : "초록색 토픽 아래로 이동합니다.")
         } else {
             pan = CGPoint(x: originalPan.x + p.x - mouseStart.x, y: originalPan.y + p.y - mouseStart.y)
         }
@@ -358,17 +461,25 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
     override func mouseUp(with event: NSEvent) {
         if bending, let bendPreview {
             session.updateRelation("관계선 곡률 변경") { $0.bend = bendPreview }
-        } else if dragged, let id = draggingTopic, let target = dropTarget {
-            session.change("토픽 이동") { $0.reparent(id, to: target) }
+        } else if dragged, draggingTopic != nil, let placement = dropPlacement {
+            let ids = session.selection
+            session.change("토픽 이동") {
+                $0.move(ids, to: placement.parent, before: placement.before, side: placement.side)
+            }
+        }
+        if !dragged, let id = draggingTopic, event.modifierFlags.intersection([.command, .shift]).isEmpty {
+            session.selectTopic(id)
         }
         draggingTopic = nil
         dropTarget = nil
+        dropPlacement = nil
         bending = false
         bendPreview = nil
         dragged = false
         if session.connectingFrom == nil { session.cancelConnecting() }
         needsDisplay = true
         updateAccessibility()
+        persistViewport()
     }
     override func scrollWheel(with event: NSEvent) {
         finishEditing()
@@ -380,11 +491,17 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
             pan.y += event.scrollingDeltaY * factor
             needsDisplay = true
         }
+        persistViewport()
+        updateAccessibility()
     }
     override func magnify(with event: NSEvent) { setZoom(session.zoom * (1 + event.magnification)) }
     func setZoom(_ scale: Double) {
         finishEditing()
+        let oldZoom = session.zoom
         session.zoom = min(3, max(0.15, scale))
+        pan.x *= session.zoom / oldZoom
+        pan.y *= session.zoom / oldZoom
+        persistViewport()
         needsDisplay = true
         updateAccessibility()
     }
@@ -408,6 +525,7 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
                 0.15,
                 min((bounds.width - 100) / max(all.width, 1), (bounds.height - 100) / max(all.height, 1))))
         pan = CGPoint(x: -all.midX * session.zoom, y: -all.midY * session.zoom)
+        persistViewport()
         needsDisplay = true
         updateAccessibility()
     }
@@ -419,24 +537,26 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
         }
         needsDisplay = true
     }
-    func beginEditing() {
+    func beginEditing(selectAll: Bool = true) {
         finishEditing()
         guard let id = session.selectedTopic, let topic = session.map.topic(id), let rect = frames[id] else {
             return
         }
         reveal(id)
-        let r = screenRect(rect).insetBy(dx: 5, dy: 5)
+        let r = screenRect(rect)
         let field = TopicTextView(frame: r)
         field.string = topic.title
-        field.font = .systemFont(ofSize: session.fontSize * session.zoom)
-        field.textColor = .labelColor
-        field.backgroundColor = .textBackgroundColor
+        let font = nodeFont(topic)
+        field.font = NSFont(descriptor: font.fontDescriptor, size: font.pointSize * session.zoom)
+        field.textColor = topic.parentID == nil ? .textBackgroundColor : .labelColor
+        field.backgroundColor = topic.parentID == nil ? .labelColor : .textBackgroundColor
         field.isRichText = false
         field.allowsUndo = true
         field.isAutomaticQuoteSubstitutionEnabled = false
         field.isVerticallyResizable = true
         field.isHorizontallyResizable = false
-        field.textContainerInset = NSSize(width: 8, height: 6)
+        field.textContainerInset = NSSize(width: 18 * session.zoom, height: 13 * session.zoom)
+        field.textContainer?.lineFragmentPadding = 0
         field.textContainer?.widthTracksTextView = true
         field.delegate = self
         field.setAccessibilityLabel("토픽 제목 편집")
@@ -447,20 +567,31 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
         field.commit = { [weak self] in self?.finishEditing() }
         field.cancel = { [weak self] in self?.finishEditing(commit: false) }
         field.addChild = { [weak self] in self?.session.add(child: true) }
+        editingChanged = false
         editingID = id
         editor = field
         addSubview(field)
         setAccessibilityChildren([field])
         window?.makeFirstResponder(field)
-        field.selectAll(nil)
+        if selectAll { field.selectAll(nil) }
+        needsDisplay = true
     }
     func textDidChange(_ notification: Notification) {
-        guard let editor, let container = editor.textContainer, let manager = editor.layoutManager else {
-            return
+        editingChanged = true
+        // Data snapshots include the live buffer without splitting a title edit into many undo steps.
+        session.document?.updateChangeCount(.changeDone)
+        rebuild()
+    }
+    var mapForSaving: MindMap {
+        var map = session.map
+        if let editor, let id = editingID, let index = map.topics.firstIndex(where: { $0.id == id }) {
+            map.topics[index].title = editor.string.isEmpty ? "새 토픽" : editor.string
         }
-        manager.ensureLayout(for: container)
-        editor.setFrameSize(
-            NSSize(width: editor.frame.width, height: max(40, manager.usedRect(for: container).height + 16)))
+        return map
+    }
+    func replaceEditorText(_ text: String) {
+        editor?.string = text
+        textDidChange(Notification(name: NSText.didChangeNotification))
     }
     func textDidEndEditing(_ notification: Notification) { finishEditing() }
     func finishEditing(commit: Bool = true) {
@@ -478,6 +609,9 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
                 }
             }
         }
+        if editingChanged { session.document?.updateChangeCount(.changeDone) }
+        editingChanged = false
+        rebuild()
         window?.makeFirstResponder(self)
     }
     override func keyDown(with event: NSEvent) {
@@ -485,10 +619,28 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
         case 48: session.add(child: true)
         case 36: session.add(child: false)
         case 51, 117: session.deleteSelection()
-        case 53: session.cancelConnecting()
+        case 53:
+            session.cancelConnecting()
+            draggingTopic = nil
+            dropTarget = nil
+            dropPlacement = nil
+            dragged = false
+            needsDisplay = true
         case 49: beginEditing()
         case 123, 124, 125, 126: navigate(event.keyCode)
-        default: super.keyDown(with: event)
+        default:
+            if !event.modifierFlags.intersection([.command, .control]).isEmpty {
+                super.keyDown(with: event)
+                return
+            }
+            if let text = event.characters, !text.isEmpty,
+                text.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) })
+            {
+                beginEditing()
+                editor?.keyDown(with: event)
+            } else {
+                super.keyDown(with: event)
+            }
         }
     }
     private func navigate(_ code: UInt16) {
@@ -517,7 +669,11 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
     }
     override func menu(for event: NSEvent) -> NSMenu? {
         finishEditing()
-        if let id = topicAt(world(convert(event.locationInWindow, from: nil))) { session.selectTopic(id) }
+        if let id = topicAt(world(convert(event.locationInWindow, from: nil))),
+            !session.selection.contains(id)
+        {
+            session.selectTopic(id)
+        }
         let menu = NSMenu()
         for (title, action) in [
             ("하위 토픽 추가", #selector(EditorController.addChildTopic(_:))),
@@ -525,6 +681,12 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
             ("제목 편집", #selector(EditorController.editTopic(_:))),
             ("관계선 연결", #selector(EditorController.connect(_:))),
             ("가지 접기/펼치기", #selector(EditorController.fold(_:))),
+            ("가지 복사", #selector(copy(_:))),
+            ("가지 붙여넣기", #selector(paste(_:))),
+            ("가지 복제", #selector(duplicateBranches(_:))),
+            ("위로 이동", #selector(EditorController.moveTopicUp(_:))),
+            ("아래로 이동", #selector(EditorController.moveTopicDown(_:))),
+            ("한 단계 밖으로", #selector(EditorController.outdent(_:))),
             ("선택 항목 삭제", #selector(EditorController.deleteItem(_:))),
         ] {
             menu.addItem(withTitle: title, action: action, keyEquivalent: "")
@@ -532,6 +694,10 @@ final class TopicAccessibilityElement: NSAccessibilityElement {
         return menu
     }
     private func updateAccessibility() {
+        if let editor {
+            setAccessibilityChildren([editor])
+            return
+        }
         let elements = session.map.topics.compactMap { topic -> TopicAccessibilityElement? in
             guard let rect = frames[topic.id] else { return nil }
             let element = TopicAccessibilityElement { [weak self] in

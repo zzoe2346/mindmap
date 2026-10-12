@@ -57,3 +57,52 @@ private func required<T>(_ value: T?) throws -> T { try #require(value) }
     action()
     document.undoManager?.endUndoGrouping()
 }
+
+@Test @MainActor func dropZonesDistinguishReorderAndReparent() throws {
+    let document = MindmapDocument()
+    let session = document.session
+    let a = try #require({ session.map.addChild(to: session.map.root.id, title: "첫째") }())
+    let b = try #require({ session.map.addChild(to: session.map.root.id, title: "둘째") }())
+    let canvas = MapCanvas(session: session)
+    session.selectTopic(a)
+    let rect = try #require(canvas.frames[b])
+    let center = try #require(canvas.dropPlacement(at: CGPoint(x: rect.midX, y: rect.midY)))
+    #expect(center.parent == b)
+    #expect(center.lineY == nil)
+    let above = try #require(canvas.dropPlacement(at: CGPoint(x: rect.midX, y: rect.minY - 8)))
+    #expect(above.parent == session.map.root.id)
+    #expect(above.before == b)
+    #expect(above.lineY != nil)
+    session.selectTopic(session.map.root.id)
+    #expect(canvas.dropPlacement(at: CGPoint(x: rect.midX, y: rect.midY)) == nil)
+}
+@Test @MainActor func liveEditingSnapshotSavesAndCancelRestoresOriginal() throws {
+    let document = MindmapDocument()
+    let canvas = MapCanvas(session: document.session)
+    document.session.selectTopic(document.session.map.root.id)
+    canvas.beginEditing()
+    canvas.replaceEditorText("작성 중 한글\n아직 확정하지 않은 문장")
+    let saved = try MindMap.decode(document.data(ofType: "com.jeongseonghun.mindmap.document"))
+    #expect(saved.root.title == "작성 중 한글\n아직 확정하지 않은 문장")
+    #expect(document.session.map.root.title == "중심 주제")
+    canvas.finishEditing(commit: false)
+    #expect(
+        try MindMap.decode(document.data(ofType: "com.jeongseonghun.mindmap.document")).root.title == "중심 주제")
+}
+@Test @MainActor func multiMoveUndoRestoresOrderAndParent() throws {
+    let document = MindmapDocument()
+    document.undoManager?.groupsByEvent = false
+    let session = document.session
+    let a = try #require({ session.map.addChild(to: session.map.root.id, title: "A") }())
+    let b = try #require({ session.map.addChild(to: session.map.root.id, title: "B") }())
+    let c = try #require({ session.map.addChild(to: session.map.root.id, title: "C") }())
+    let original = session.map
+    session.selectedTopic = a
+    session.selectedTopics = [a, b]
+    perform(document) { session.change("두 가지 이동") { $0.move([a, b], to: c) } }
+    #expect(session.map.children(c).map(\.id) == [a, b])
+    document.undoManager?.undo()
+    #expect(session.map == original)
+    document.undoManager?.redo()
+    #expect(session.map.children(c).map(\.id) == [a, b])
+}
