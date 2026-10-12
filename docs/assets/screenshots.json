@@ -4,8 +4,28 @@
   "sourceRevision": "source-files-sha256:c8316c46fa51341c01e0f4c07d9e864d961cc77e801875511dab4ce15f191bb4",
   "os": "macOS 27.0.1 (26A434)",
   "sdk": "27.0",
-  "screenshots": [],
-  "reason": "Actual CUA screenshots of the editor and home were inspected in tool output. No screenshot file was exported or substituted.",
+  "screenshots": [
+    {
+      "file": "editor.png",
+      "description": "10-topic public demo document",
+      "width": 2480,
+      "height": 1716,
+      "sha256": "cbf563db361d3e664c4b67ea7f7676e1b619900680d3e06e2a7ac6e607209b98",
+      "containsUserDocuments": false
+    },
+    {
+      "file": "home.png",
+      "description": "Three public demo documents and one favorite",
+      "width": 2200,
+      "height": 1544,
+      "sha256": "71f6fbf1d9b1e1f3d9f14055e9bffcef071dab09613dc0ea430a70b5c641af59",
+      "containsUserDocuments": false
+    }
+  ],
   "binarySha256": "bdc1c9b7caa1b2aad3a1bbcc68a5c868ef41a16124d0c7c75a793f0d94904d1a",
-  "verification": "2026-10-12 home logo uses application icon, 21 tests and actual packaged app relaunch verified"
+  "verification": "2026-10-12 home logo uses application icon, 21 tests and actual packaged app relaunch verified",
+  "sourceCommit": "faf3b1ac7f3ac98e5d07e019f864288f4a013984",
+  "captureMethod": "CUA getScreenshot of actual app windows, converted from JPEG to PNG with sips without cropping or retouching",
+  "captureBundleIdentifier": "com.jeongseonghun.mindmap.readmepreview",
+  "captureBinarySha256": "d240ed88503a8970232d80b3174e3f5c79d7abfd8994ed80d792b046994e56d6"
 }
